@@ -1,0 +1,1558 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, interactive-widget=resizes-content">
+<title>マークダウンメモ</title>
+<meta name="description" content="見出しや強調をボタンで入力できる、シンプルなマークダウンメモアプリ。インストール不要、ブラウザだけで動作します。">
+
+<!-- favicon / home screen icon -->
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="manifest" href="manifest.webmanifest">
+
+<!-- add-to-home-screen behavior (iOS / Android) -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="マークダウンメモ">
+<meta name="theme-color" content="#EDECE7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#212220" media="(prefers-color-scheme: dark)">
+
+<!-- link preview (X / Booth 等でURLを共有した際の表示) -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="マークダウンメモ">
+<meta property="og:description" content="見出しや強調をボタンで入力できる、シンプルなマークダウンメモアプリ">
+<meta name="twitter:card" content="summary">
+<style>
+  :root{
+    --bg:#EDECE7;
+    --surface:#F7F6F2;
+    --surface-alt:#E3E2DA;
+    --border:#D8D6CA;
+    --text:#3E3D37;
+    --text-sub:#8B897C;
+    --accent:#5F7268;
+    --accent-bg:#DCE3DC;
+    --danger:#AD5C4D;
+    --danger-bg:#F1DAD3;
+    --radius:12px;
+    --radius-sm:8px;
+    --toolbar-h:56px;
+  }
+  html.dark{
+    --bg:#212220;
+    --surface:#2A2B27;
+    --surface-alt:#34352F;
+    --border:#3D3E36;
+    --text:#E7E5DD;
+    --text-sub:#96958A;
+    --accent:#C9A876;
+    --accent-bg:#3A362A;
+    --danger:#C98377;
+    --danger-bg:#3A2B27;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{
+    height:100%;
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overscroll-behavior:none;
+  }
+  #app{
+    position:fixed;
+    inset:0;
+    display:flex;
+    flex-direction:column;
+    max-width:560px;
+    margin:0 auto;
+    background:var(--bg);
+  }
+  .hidden{display:none !important;}
+
+  /* ---- flat primitives ---- */
+  .panel{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+  }
+  .panel-sm{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius-sm);
+  }
+  .flat-btn{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius-sm);
+    color:var(--text);
+    cursor:pointer;
+    transition:background .08s ease;
+  }
+  .flat-btn:active, .flat-btn.pressed{
+    background:var(--surface-alt);
+  }
+  .flat-btn:disabled{opacity:.35;cursor:default;}
+  .flat-btn:disabled:active{background:var(--surface);}
+
+  /* ---- header ---- */
+  header{
+    flex:0 0 auto;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:calc(env(safe-area-inset-top) + 12px) 14px 10px;
+  }
+  .icon-btn{
+    height:38px;flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;
+    font-weight:600;
+    padding:0 12px;
+  }
+  header h1{
+    font-size:16px;
+    font-weight:700;
+    margin:0;
+    letter-spacing:.02em;
+    flex:1;
+  }
+  #titleInput{
+    flex:1;
+    border:none;
+    outline:none;
+    background:transparent;
+    color:var(--text);
+    font-size:16px;
+    font-weight:700;
+    padding:10px 10px;
+    min-width:0;
+  }
+  #titleInput::placeholder{color:var(--text-sub);font-weight:600;}
+
+  /* ---- list view ---- */
+  #view-list{flex:1;display:flex;flex-direction:column;min-height:0;}
+  #pageList{
+    flex:1;
+    overflow-y:auto;
+    padding:4px 14px 90px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .page-card{
+    padding:13px 14px;
+    display:flex;
+    align-items:flex-start;
+    gap:10px;
+    cursor:pointer;
+  }
+  .page-card .info{flex:1;min-width:0;}
+  .page-card .p-title{font-size:15px;font-weight:700;margin:0 0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .page-card .p-snippet{font-size:13px;color:var(--text-sub);margin:0 0 6px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .page-card .p-date{font-size:11px;color:var(--text-sub);}
+  .page-card .del-btn{
+    flex:0 0 auto;font-size:12px;color:var(--danger);padding:6px 10px;
+  }
+  .empty-state{
+    text-align:center;
+    color:var(--text-sub);
+    padding:60px 30px;
+    font-size:14px;
+    line-height:1.8;
+  }
+  .fab-row{
+    position:absolute;
+    right:20px;bottom:24px;
+  }
+  .fab{
+    width:52px;height:52px;border-radius:50%;
+    font-size:24px;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--accent-bg);
+    color:var(--accent);
+    border:1px solid var(--border);
+  }
+
+  /* ---- editor view ---- */
+  #view-editor{flex:1;display:flex;flex-direction:column;min-height:0;padding-bottom:var(--toolbar-h);}
+  .tabbar{
+    margin:0 14px 10px;
+    display:flex;
+    padding:3px;
+    gap:3px;
+  }
+  .tabbar button{
+    flex:1;
+    padding:8px 0;
+    font-size:13px;
+    font-weight:700;
+    color:var(--text-sub);
+    background:transparent;
+    border:none;
+    border-radius:calc(var(--radius-sm) - 2px);
+  }
+  .tabbar button.active{
+    color:var(--accent);
+    background:var(--accent-bg);
+  }
+  #editArea{
+    flex:1;
+    min-height:0;
+    margin:0 14px;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  #editor, #preview{
+    flex:1;
+    min-height:0;
+    width:100%;
+    padding:14px;
+    font-size:15px;
+    line-height:1.75;
+    overflow-y:auto;
+  }
+  #editor{
+    border:1px solid var(--border);
+    outline:none;
+    resize:none;
+    color:var(--text);
+    background:var(--surface);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Noto Sans JP",monospace;
+  }
+  #preview{color:var(--text);background:var(--surface);border:1px solid var(--border);}
+  #preview h1,#preview h2,#preview h3{margin:.6em 0 .35em;line-height:1.4;}
+  #preview h1{font-size:1.55em;}
+  #preview h2{font-size:1.3em;}
+  #preview h3{font-size:1.12em;}
+  #preview p{margin:.5em 0;}
+  #preview ul,#preview ol{padding-left:1.4em;margin:.5em 0;}
+  #preview ul.task-list{list-style:none;padding-left:.2em;}
+  #preview ul.task-list li{display:flex;align-items:flex-start;gap:6px;}
+  #preview ul.task-list input{margin-top:5px;}
+  #preview blockquote{
+    margin:.6em 0;padding:2px 14px;
+    border-left:3px solid var(--accent);
+    color:var(--text-sub);
+  }
+  #preview code{
+    background:var(--surface-alt);
+    padding:2px 5px;border-radius:5px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:.9em;
+  }
+  #preview pre{
+    background:var(--surface-alt);
+    padding:12px;border-radius:10px;
+    overflow-x:auto;
+    border:1px solid var(--border);
+  }
+  #preview pre code{background:none;padding:0;}
+  #preview a{color:var(--accent);}
+  #preview hr{border:none;border-top:1px solid var(--border);margin:1em 0;}
+  #preview img{max-width:100%;border-radius:8px;}
+  #preview.empty::before{
+    content:attr(data-placeholder);
+    color:var(--text-sub);
+  }
+
+  .status-row{
+    margin:8px 14px 0;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:8px;
+  }
+  #saveStatus{
+    font-size:11px;
+    color:var(--text-sub);
+  }
+  #saveStatus.save-error{color:var(--danger);font-weight:700;}
+  #toast{
+    position:fixed;
+    left:50%;
+    top:calc(env(safe-area-inset-top) + 10px);
+    transform:translate(-50%,-140%);
+    max-width:520px;
+    width:calc(100% - 32px);
+    background:var(--danger-bg);
+    color:var(--danger);
+    border:1px solid var(--danger);
+    border-radius:var(--radius-sm);
+    padding:12px 16px;
+    font-size:13px;
+    font-weight:600;
+    line-height:1.6;
+    z-index:60;
+    opacity:0;
+    transition:transform .18s ease, opacity .18s ease;
+  }
+  #toast.show{
+    transform:translate(-50%,0);
+    opacity:1;
+  }
+  #charCounter{
+    font-size:12px;
+    color:var(--text-sub);
+    padding:5px 12px;
+    cursor:pointer;
+  }
+  #charCounter:active{background:var(--surface-alt);}
+  #charCounter.over{
+    color:#fff;
+    background:var(--danger);
+    border-color:var(--danger);
+  }
+  #charLimitEdit{
+    width:92px;font-size:12px;padding:5px 10px;text-align:center;
+    color:var(--text);border:1px solid var(--border);background:var(--surface);border-radius:8px;
+  }
+
+  /* ---- keyboard toolbar (fixed, follows keyboard) ---- */
+  #toolbar{
+    position:fixed;
+    left:50%;
+    transform:translateX(-50%);
+    width:100%;
+    max-width:560px;
+    bottom:0;
+    z-index:30;
+    display:flex;
+    gap:6px;
+    padding:9px 10px calc(9px + env(safe-area-inset-bottom));
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+    background:var(--surface);
+    border-top:1px solid var(--border);
+    scrollbar-width:none;
+  }
+  #toolbar::-webkit-scrollbar{display:none;}
+  #toolbar button{
+    flex:0 0 auto;
+    min-width:36px;height:36px;
+    padding:0 10px;
+    font-size:13px;
+    font-weight:700;
+    white-space:nowrap;
+    display:flex;align-items:center;justify-content:center;gap:4px;
+  }
+  #toolbar .sep{
+    flex:0 0 auto;
+    width:1px;
+    margin:4px 2px;
+    background:var(--border);
+  }
+  #toolbar .word-btn{
+    font-weight:500;
+    color:var(--accent);
+  }
+  #toolbar .add-word{
+    color:var(--text-sub);
+  }
+
+  /* ---- custom glyph icons (flat, monochrome, mirror preview styling) ---- */
+  .ico-quote{display:inline-flex;align-items:center;gap:3px;}
+  .ico-quote .bar{width:3px;height:14px;background:currentColor;border-radius:1px;}
+  .ico-quote .lines{display:flex;flex-direction:column;gap:3px;}
+  .ico-quote .lines i{display:block;width:13px;height:2px;background:currentColor;border-radius:1px;font-style:normal;}
+  .ico-code{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:11px;
+    background:var(--surface-alt);
+    border:1px solid var(--border);
+    border-radius:5px;
+    padding:3px 6px;
+    color:var(--text);
+  }
+  .ico-check{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:15px;height:15px;
+    border:1.5px solid currentColor;
+    border-radius:3px;
+    font-size:10px;
+    line-height:1;
+  }
+
+  /* ---- modal ---- */
+  #modalOverlay{
+    position:fixed;inset:0;
+    background:rgba(30,29,25,.32);
+    display:flex;align-items:flex-end;justify-content:center;
+    z-index:50;
+  }
+  #modalOverlay.hidden{display:none;}
+  #modalSheet{
+    width:100%;max-width:560px;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-bottom:none;
+    border-radius:18px 18px 0 0;
+    padding:20px 20px calc(20px + env(safe-area-inset-bottom));
+    max-height:82vh;
+    overflow-y:auto;
+  }
+  #modalSheet h2{
+    font-size:16px;margin:0 0 16px;
+  }
+  .settings-row{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:12px 0;
+    border-bottom:1px solid var(--border);
+    gap:10px;
+  }
+  .settings-row:last-of-type{border-bottom:none;}
+  .settings-row label{font-size:14px;font-weight:600;}
+  .settings-row input[type=number]{
+    width:80px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:14px;color:var(--text);text-align:center;background:var(--surface);
+  }
+  .theme-toggle{display:flex;gap:6px;}
+  .theme-toggle button{padding:8px 14px;font-size:13px;font-weight:700;}
+  .theme-toggle button.active{color:var(--accent);background:var(--accent-bg);}
+  .export-row{display:flex;gap:10px;margin-top:6px;}
+  .export-row button, .export-row a{flex:1;padding:12px;font-size:13px;font-weight:700;}
+  .word-manage-list{display:flex;flex-direction:column;gap:8px;margin-top:8px;}
+  .word-manage-item{display:flex;align-items:center;gap:8px;padding:9px 12px;}
+  .word-manage-item span{flex:1;font-size:13px;word-break:break-all;}
+  .word-manage-item button{flex:0 0 auto;font-size:12px;color:var(--danger);padding:5px 9px;}
+  .add-word-row{display:flex;gap:8px;margin-top:10px;}
+  .add-word-row input{flex:1;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:13px;color:var(--text);background:var(--surface);}
+  .add-word-row button{padding:0 16px;font-weight:700;color:var(--accent);}
+  .modal-close{
+    display:block;width:100%;text-align:center;
+    padding:12px;margin-top:16px;font-size:14px;font-weight:700;color:var(--text-sub);
+  }
+  .section-label{font-size:12px;font-weight:700;color:var(--text-sub);margin:18px 0 6px;letter-spacing:.05em;}
+  .section-label:first-child{margin-top:0;}
+  .order-list{display:flex;flex-direction:column;gap:6px;margin-top:6px;}
+  .order-item{display:flex;align-items:center;gap:8px;padding:9px 10px;touch-action:pan-y;}
+  .order-item.dragging{opacity:.55;}
+  .order-item .drag-handle{
+    flex:0 0 auto;width:26px;height:26px;display:flex;align-items:center;justify-content:center;
+    font-size:15px;color:var(--text-sub);cursor:grab;touch-action:none;
+  }
+  .order-item .o-label{flex:1;font-size:13px;font-weight:600;}
+  .order-item .o-move{padding:5px 9px;font-size:11px;}
+  .hint-text{font-size:12px;color:var(--text-sub);line-height:1.6;margin:4px 0 0;}
+  .help-list{margin:6px 0 0;padding-left:1.1em;display:flex;flex-direction:column;gap:6px;}
+  .help-list li{font-size:12.5px;color:var(--text-sub);line-height:1.6;}
+  .link-btn{
+    display:flex;align-items:center;justify-content:center;
+    text-decoration:none;
+  }
+  input[type=file]{font-size:12px;color:var(--text-sub);}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ===== LIST VIEW ===== -->
+  <div id="view-list">
+    <header>
+      <h1>マークダウンメモ</h1>
+      <button class="icon-btn flat-btn" id="listSettingsBtn">設定</button>
+    </header>
+    <div id="pageList"></div>
+    <div class="fab-row">
+      <button class="fab flat-btn" id="newPageBtn">＋</button>
+    </div>
+  </div>
+
+  <!-- ===== EDITOR VIEW ===== -->
+  <div id="view-editor" class="hidden">
+    <header>
+      <button class="icon-btn flat-btn" id="backBtn">戻る</button>
+      <input id="titleInput" placeholder="無題のページ" maxlength="60">
+      <button class="icon-btn flat-btn" id="copyBtn">コピー</button>
+      <button class="icon-btn flat-btn" id="editorSettingsBtn">設定</button>
+    </header>
+
+    <div class="tabbar panel-sm">
+      <button id="tabEdit" class="active">編集</button>
+      <button id="tabPreview">プレビュー</button>
+    </div>
+
+    <div id="editArea">
+      <textarea id="editor" placeholder="ここに入力…" spellcheck="false"></textarea>
+      <div id="preview" class="hidden" data-placeholder="プレビューがここに表示されます"></div>
+    </div>
+
+    <div class="status-row">
+      <span id="saveStatus">保存済み</span>
+      <span id="charCounter" class="panel-sm">0 / 2000</span>
+    </div>
+  </div>
+
+  <!-- toolbar lives outside the flex flow so it can float above the keyboard -->
+  <div id="toolbar" class="hidden"></div>
+
+</div>
+
+<!-- ===== MODAL ===== -->
+<div id="modalOverlay" class="hidden">
+  <div id="modalSheet"></div>
+</div>
+<div id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------------- storage adapter ----------------
+     Inside the Claude artifact sandbox, window.storage persists data
+     across sessions. When this file is downloaded and opened directly
+     in a browser, window.storage does not exist, so we fall back to
+     the browser's own localStorage (tied to this file / device). */
+  var USE_CLOUD = (typeof window.storage !== "undefined" && window.storage && typeof window.storage.get === "function");
+  var storageAdapter = {
+    get: function(key){
+      if(USE_CLOUD){
+        return window.storage.get(key, false)
+          .then(function(res){ return res ? res.value : null; })
+          .catch(function(){ return null; });
+      }
+      try{ return Promise.resolve(localStorage.getItem(key)); }
+      catch(e){ return Promise.resolve(null); }
+    },
+    set: function(key, value){
+      if(USE_CLOUD){
+        return window.storage.set(key, value, false); // rejects on failure; caller handles it
+      }
+      try{
+        localStorage.setItem(key, value);
+        return Promise.resolve();
+      }catch(e){
+        return Promise.reject(e);
+      }
+    }
+  };
+
+  /* ---------------- button catalog (reorderable) ---------------- */
+  var BUTTON_DEFS = {
+    h1:   { label:"H1", action:function(){ toggleHeading(1); } },
+    h2:   { label:"H2", action:function(){ toggleHeading(2); } },
+    h3:   { label:"H3", action:function(){ toggleHeading(3); } },
+    bold: { label:"<b>B</b>", name:"太字", action:function(){ wrapSelection("**","**","太字"); } },
+    italic:{ label:"<i>I</i>", name:"斜体", action:function(){ wrapSelection("*","*","斜体"); } },
+    strike:{ label:"<s>S</s>", name:"取り消し線", action:function(){ wrapSelection("~~","~~","取り消し線"); } },
+    quote:{ label:'<span class="ico-quote"><span class="bar"></span><span class="lines"><i></i><i></i></span></span>', name:"引用", action:function(){ toggleLinePrefix(function(){ return "> "; }); } },
+    code: { label:'<span class="ico-code">&lt;/&gt;</span>', name:"コード", action:toggleCode },
+    ul:   { label:"箇条書き", action:function(){ toggleLinePrefix(function(){ return "- "; }); } },
+    ol:   { label:"番号リスト", action:function(){ toggleLinePrefix(function(n){ return n + ". "; }); } },
+    check:{ label:'<span class="ico-check">&#10003;</span>', name:"チェック", action:function(){ toggleLinePrefix(function(){ return "- [ ] "; }); } },
+    link: { label:"リンク", action:insertLink },
+    hr:   { label:"区切り線", action:insertHr }
+  };
+  var DEFAULT_ORDER = ["h1","h2","h3","bold","italic","strike","quote","code","ul","ol","check","link","hr"];
+
+  /* ---------------- state ---------------- */
+  var DEFAULT_STATE = {
+    theme:"light",
+    charLimit:2000,
+    customWords:[],
+    toolbarOrder: DEFAULT_ORDER.slice(),
+    pages:[],
+    currentPageId:null
+  };
+  var state = null;
+  var saveTimer = null;
+  var STORAGE_KEY = "mdlite-state-v1";
+
+  function uid(){
+    return (crypto.randomUUID ? crypto.randomUUID() : ("id-"+Date.now()+"-"+Math.random().toString(16).slice(2)));
+  }
+
+  /* ---------------- self-contained markdown renderer ----------------
+     No external library, no CDN dependency. Supports exactly the
+     syntax this app's toolbar produces. HTML is escaped FIRST, and
+     only our own fixed set of tags is ever inserted afterwards, so
+     arbitrary HTML/script typed by the user can never execute
+     (structurally immune to XSS, no sanitizer library needed). */
+  function escapeHtml(s){
+    return String(s)
+      .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+  }
+  function sanitizeUrl(rawEscapedUrl){
+    var plain = rawEscapedUrl.replace(/&amp;/g,"&").replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&lt;/g,"<").replace(/&gt;/g,">").trim();
+    if(/^(https?:|mailto:)/i.test(plain)) return rawEscapedUrl;
+    if(!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(plain)) return rawEscapedUrl; // relative / scheme-less, e.g. placeholder "URL"
+    return "#"; // block javascript:, data:, etc.
+  }
+  function inlineMd(text){
+    var codeSpans = [];
+    var out = escapeHtml(text);
+    out = out.replace(/`([^`\n]+)`/g, function(m, code){
+      var idx = codeSpans.push(code) - 1;
+      return "\u0000C" + idx + "\u0000";
+    });
+    out = out.replace(/\[([^\[\]]+)\]\(([^()\s]+)\)/g, function(m, label, url){
+      return '<a href="' + sanitizeUrl(url) + '" target="_blank" rel="noopener noreferrer">' + label + '</a>';
+    });
+    out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    out = out.replace(/~~([^~]+)~~/g, "<del>$1</del>");
+    out = out.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    out = out.replace(/\u0000C(\d+)\u0000/g, function(m, idx){
+      return "<code>" + codeSpans[parseInt(idx,10)] + "</code>";
+    });
+    return out;
+  }
+  function mdToHtml(source){
+    var lines = String(source).replace(/\r\n?/g,"\n").split("\n");
+    var out = [], i = 0, n = lines.length;
+    function isBlank(l){ return l.trim() === ""; }
+    function isBlockStart(l){
+      return /^```/.test(l) || /^#{1,6}\s+/.test(l) || /^(-{3,}|\*{3,}|_{3,})\s*$/.test(l) ||
+             /^>\s?/.test(l) || /^[-*+]\s+/.test(l) || /^\d+\.\s+/.test(l);
+    }
+    while(i < n){
+      var line = lines[i];
+      if(isBlank(line)){ i++; continue; }
+
+      if(/^```/.test(line)){
+        var buf = [];
+        i++;
+        while(i < n && !/^```/.test(lines[i])){ buf.push(lines[i]); i++; }
+        i++;
+        out.push("<pre><code>" + escapeHtml(buf.join("\n")) + "</code></pre>");
+        continue;
+      }
+      var hMatch = line.match(/^(#{1,6})\s+(.*)$/);
+      if(hMatch){
+        var level = hMatch[1].length;
+        out.push("<h" + level + ">" + inlineMd(hMatch[2]) + "</h" + level + ">");
+        i++; continue;
+      }
+      if(/^(-{3,}|\*{3,}|_{3,})\s*$/.test(line)){
+        out.push("<hr>"); i++; continue;
+      }
+      if(/^>\s?/.test(line)){
+        var qLines = [];
+        while(i < n && /^>\s?/.test(lines[i])){ qLines.push(lines[i].replace(/^>\s?/,"")); i++; }
+        out.push("<blockquote><p>" + qLines.map(inlineMd).join("<br>") + "</p></blockquote>");
+        continue;
+      }
+      if(/^[-*+]\s+\[[ xX]\]\s+/.test(line)){
+        var citems = [];
+        while(i < n && /^[-*+]\s+\[[ xX]\]\s+/.test(lines[i])){
+          var cm = lines[i].match(/^[-*+]\s+\[([ xX])\]\s+(.*)$/);
+          var checked = cm[1].toLowerCase() === "x";
+          citems.push("<li><input type=\"checkbox\" disabled" + (checked ? " checked" : "") + "> " + inlineMd(cm[2]) + "</li>");
+          i++;
+        }
+        out.push('<ul class="task-list">' + citems.join("") + "</ul>");
+        continue;
+      }
+      if(/^[-*+]\s+/.test(line)){
+        var uitems = [];
+        while(i < n && /^[-*+]\s+/.test(lines[i]) && !/^[-*+]\s+\[[ xX]\]\s+/.test(lines[i])){
+          uitems.push("<li>" + inlineMd(lines[i].replace(/^[-*+]\s+/,"")) + "</li>");
+          i++;
+        }
+        out.push("<ul>" + uitems.join("") + "</ul>");
+        continue;
+      }
+      if(/^\d+\.\s+/.test(line)){
+        var oitems = [];
+        while(i < n && /^\d+\.\s+/.test(lines[i])){
+          oitems.push("<li>" + inlineMd(lines[i].replace(/^\d+\.\s+/,"")) + "</li>");
+          i++;
+        }
+        out.push("<ol>" + oitems.join("") + "</ol>");
+        continue;
+      }
+      var pLines = [];
+      while(i < n && !isBlank(lines[i]) && !isBlockStart(lines[i])){ pLines.push(lines[i]); i++; }
+      if(pLines.length){
+        out.push("<p>" + pLines.map(inlineMd).join("<br>") + "</p>");
+      } else {
+        i++;
+      }
+    }
+    return out.join("\n");
+  }
+
+  function setSaveStatus(status){
+    var el = document.getElementById("saveStatus");
+    if(!el) return;
+    if(status === "saving"){ el.textContent = "保存中…"; el.classList.remove("save-error"); }
+    else if(status === "saved"){ el.textContent = "保存済み"; el.classList.remove("save-error"); }
+    else if(status === "error"){ el.textContent = "保存できませんでした"; el.classList.add("save-error"); }
+  }
+  var toastTimer = null;
+  function showToast(msg){
+    var t = document.getElementById("toast");
+    if(!t) return;
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ t.classList.remove("show"); }, 4200);
+  }
+
+  function saveState(immediate){
+    clearTimeout(saveTimer);
+    setSaveStatus("saving");
+    var doSave = function(){
+      storageAdapter.set(STORAGE_KEY, JSON.stringify(state)).then(function(){
+        setSaveStatus("saved");
+      }).catch(function(e){
+        console.error("save failed", e);
+        setSaveStatus("error");
+        showToast("保存できませんでした。端末の空き容量を確認するか、設定の「全データを書き出す」でバックアップを取ってください。");
+      });
+    };
+    if(immediate){ doSave(); } else { saveTimer = setTimeout(doSave, 600); }
+  }
+
+  function loadState(){
+    return storageAdapter.get(STORAGE_KEY).then(function(raw){
+      if(raw){
+        try{
+          var parsed = JSON.parse(raw);
+          state = Object.assign({}, DEFAULT_STATE, parsed);
+          if(!Array.isArray(state.toolbarOrder) || state.toolbarOrder.length === 0){
+            state.toolbarOrder = DEFAULT_ORDER.slice();
+          } else {
+            // keep any newly-added button ids that aren't in a saved (older) order
+            DEFAULT_ORDER.forEach(function(id){
+              if(state.toolbarOrder.indexOf(id) === -1) state.toolbarOrder.push(id);
+            });
+          }
+        }catch(e){ state = JSON.parse(JSON.stringify(DEFAULT_STATE)); }
+      } else {
+        state = JSON.parse(JSON.stringify(DEFAULT_STATE));
+      }
+    }).catch(function(){
+      state = JSON.parse(JSON.stringify(DEFAULT_STATE));
+    });
+  }
+
+  /* ---------------- dom refs ---------------- */
+  var $ = function(id){ return document.getElementById(id); };
+  var viewList = $("view-list"), viewEditor = $("view-editor");
+  var pageListEl = $("pageList");
+  var titleInput = $("titleInput");
+  var editor = $("editor");
+  var preview = $("preview");
+  var tabEdit = $("tabEdit"), tabPreview = $("tabPreview");
+  var charCounter = $("charCounter");
+  var toolbar = $("toolbar");
+  var modalOverlay = $("modalOverlay");
+  var modalSheet = $("modalSheet");
+
+  /* ---------------- theme ---------------- */
+  function applyTheme(){
+    document.documentElement.classList.toggle("dark", state.theme === "dark");
+  }
+
+  /* ---------------- routing ---------------- */
+  function showList(){
+    flushEditorToState();
+    viewEditor.classList.add("hidden");
+    toolbar.classList.add("hidden");
+    viewList.classList.remove("hidden");
+    renderList();
+  }
+  function showEditor(pageId){
+    state.currentPageId = pageId;
+    var page = getCurrentPage();
+    if(!page) return showList();
+    titleInput.value = page.title || "";
+    editor.value = page.content || "";
+    resetHistory(editor.value);
+    updatePreview();
+    updateCharCounter();
+    viewList.classList.add("hidden");
+    viewEditor.classList.remove("hidden");
+    toolbar.classList.remove("hidden");
+    setTab("edit");
+    measureToolbar();
+  }
+  function getCurrentPage(){
+    return state.pages.find(function(p){ return p.id === state.currentPageId; });
+  }
+
+  /* ---------------- list rendering ---------------- */
+  function snippetOf(content){
+    var line = (content||"").split("\n").find(function(l){ return l.trim().length>0; }) || "";
+    return line.replace(/^#{1,6}\s*/,"").replace(/^[-*+]\s*(\[[ xX]\]\s*)?/,"").replace(/^>\s*/,"")
+      .replace(/\*\*([^*]+)\*\*/g,"$1").replace(/\*([^*]+)\*/g,"$1").replace(/`([^`]+)`/g,"$1");
+  }
+  function formatDate(ts){
+    var d = new Date(ts);
+    return d.toLocaleDateString("ja-JP",{year:"numeric",month:"2-digit",day:"2-digit"}) + " " +
+           d.toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"});
+  }
+  function renderList(){
+    var pages = state.pages.slice().sort(function(a,b){ return b.updatedAt - a.updatedAt; });
+    if(pages.length === 0){
+      pageListEl.innerHTML = '<div class="empty-state">まだページがありません。<br>右下の ＋ ボタンから新しいメモを作成しましょう。</div>';
+      return;
+    }
+    pageListEl.innerHTML = "";
+    pages.forEach(function(p){
+      var card = document.createElement("div");
+      card.className = "page-card panel";
+      card.innerHTML =
+        '<div class="info">'+
+          '<p class="p-title"></p>'+
+          '<p class="p-snippet"></p>'+
+          '<p class="p-date"></p>'+
+        '</div>'+
+        '<button class="del-btn flat-btn">削除</button>';
+      card.querySelector(".p-title").textContent = p.title && p.title.trim() ? p.title : "無題のページ";
+      card.querySelector(".p-snippet").textContent = snippetOf(p.content) || "（本文なし）";
+      card.querySelector(".p-date").textContent = formatDate(p.updatedAt);
+      card.querySelector(".info").addEventListener("click", function(){ showEditor(p.id); });
+      card.querySelector(".del-btn").addEventListener("click", function(e){
+        e.stopPropagation();
+        confirmModal("このページを削除しますか？\n「"+(p.title||"無題のページ")+"」", function(){
+          state.pages = state.pages.filter(function(x){ return x.id !== p.id; });
+          saveState(true);
+          renderList();
+        });
+      });
+      pageListEl.appendChild(card);
+    });
+  }
+
+  /* ---------------- editor: save / preview / counter ---------------- */
+  function flushEditorToState(){
+    var page = getCurrentPage();
+    if(!page) return;
+    page.title = titleInput.value;
+    page.content = editor.value;
+    page.updatedAt = Date.now();
+    saveState(true);
+  }
+  function autoSaveEditor(){
+    var page = getCurrentPage();
+    if(!page) return;
+    page.title = titleInput.value;
+    page.content = editor.value;
+    page.updatedAt = Date.now();
+    saveState(false);
+  }
+  function updatePreview(){
+    var val = editor.value;
+    if(!val.trim()){
+      preview.innerHTML = "";
+      preview.classList.add("empty");
+    } else {
+      preview.classList.remove("empty");
+      try{
+        preview.innerHTML = mdToHtml(val);
+      }catch(e){
+        preview.textContent = val;
+      }
+    }
+  }
+  function updateCharCounter(){
+    var len = editor.value.length;
+    var limit = getPageCharLimit();
+    charCounter.textContent = len + " / " + limit;
+    charCounter.classList.toggle("over", limit > 0 && len > limit);
+  }
+  function getPageCharLimit(){
+    var page = getCurrentPage();
+    if(page && page.charLimit != null) return page.charLimit;
+    return state.charLimit;
+  }
+  function startCharLimitEdit(){
+    var page = getCurrentPage();
+    if(!page) return;
+    var input = document.createElement("input");
+    input.type = "number";
+    input.min = "0";
+    input.id = "charLimitEdit";
+    input.value = getPageCharLimit();
+    charCounter.replaceWith(input);
+    input.focus();
+    input.select();
+    var committed = false;
+    function commit(){
+      if(committed) return;
+      committed = true;
+      var v = parseInt(input.value, 10);
+      if(isNaN(v) || v < 0) v = 0;
+      page.charLimit = v;
+      saveState(true);
+      input.replaceWith(charCounter);
+      updateCharCounter();
+    }
+    input.addEventListener("blur", commit);
+    input.addEventListener("keydown", function(e){
+      if(e.key === "Enter"){ e.preventDefault(); input.blur(); }
+    });
+  }
+  charCounter.addEventListener("click", startCharLimitEdit);
+
+  /* ---------------- undo / redo ---------------- */
+  var history = [""], hIndex = 0;
+  var historyTimer = null;
+  function resetHistory(value){
+    history = [value]; hIndex = 0;
+  }
+  function pushHistory(value){
+    if(value === history[hIndex]) return;
+    history = history.slice(0, hIndex+1);
+    history.push(value);
+    if(history.length > 100) history.shift();
+    hIndex = history.length - 1;
+  }
+  function pushHistoryDebounced(value){
+    clearTimeout(historyTimer);
+    historyTimer = setTimeout(function(){ pushHistory(value); }, 450);
+  }
+  function doUndo(){
+    clearTimeout(historyTimer);
+    if(hIndex > 0){
+      hIndex--;
+      editor.value = history[hIndex];
+      afterProgrammaticEdit();
+    }
+  }
+  function doRedo(){
+    clearTimeout(historyTimer);
+    if(hIndex < history.length - 1){
+      hIndex++;
+      editor.value = history[hIndex];
+      afterProgrammaticEdit();
+    }
+  }
+  function afterProgrammaticEdit(){
+    updatePreview();
+    updateCharCounter();
+    autoSaveEditor();
+    editor.focus();
+  }
+
+  /* ---------------- toolbar: text manipulation ---------------- */
+  function setEditorValue(newValue, selStart, selEnd){
+    editor.value = newValue;
+    editor.setSelectionRange(selStart, selEnd);
+    pushHistory(newValue);
+    updatePreview();
+    updateCharCounter();
+    autoSaveEditor();
+    editor.focus();
+  }
+
+  function insertPlain(text){
+    var s = editor.selectionStart, e = editor.selectionEnd;
+    var val = editor.value;
+    var newVal = val.slice(0,s) + text + val.slice(e);
+    var pos = s + text.length;
+    setEditorValue(newVal, pos, pos);
+  }
+
+  function wrapSelection(marker, endMarker, placeholder){
+    endMarker = (endMarker === undefined) ? marker : endMarker;
+    var s = editor.selectionStart, e = editor.selectionEnd;
+    var val = editor.value;
+    var before = val.slice(0, s), sel = val.slice(s,e), after = val.slice(e);
+
+    if(before.endsWith(marker) && after.startsWith(endMarker)){
+      var newVal = before.slice(0, before.length - marker.length) + sel + after.slice(endMarker.length);
+      var pos1 = s - marker.length, pos2 = e - marker.length;
+      setEditorValue(newVal, pos1, pos2);
+      return;
+    }
+    if(sel.length === 0){
+      var ph = placeholder || "";
+      var newVal2 = before + marker + ph + endMarker + after;
+      var selStart2 = s + marker.length, selEnd2 = selStart2 + ph.length;
+      setEditorValue(newVal2, selStart2, selEnd2);
+    } else {
+      var newVal3 = before + marker + sel + endMarker + after;
+      var selStart3 = s + marker.length, selEnd3 = selStart3 + sel.length;
+      setEditorValue(newVal3, selStart3, selEnd3);
+    }
+  }
+
+  function applyLinePrefix(fn){
+    var s = editor.selectionStart, e = editor.selectionEnd;
+    var val = editor.value;
+    var lineStart = val.lastIndexOf("\n", s-1) + 1;
+    var lineEndIdx = val.indexOf("\n", e);
+    if(lineEndIdx === -1) lineEndIdx = val.length;
+    var segment = val.slice(lineStart, lineEndIdx);
+    var lines = segment.split("\n");
+    var counter = 1;
+    var newLines = lines.map(function(line){
+      var out = fn(line, counter);
+      if(out !== line) counter++;
+      return out;
+    });
+    var newSegment = newLines.join("\n");
+    var newVal = val.slice(0,lineStart) + newSegment + val.slice(lineEndIdx);
+    setEditorValue(newVal, lineStart, lineStart + newSegment.length);
+  }
+
+  function toggleLinePrefix(prefixMaker){
+    applyLinePrefix(function(line, n){
+      var prefix = prefixMaker(n);
+      if(line.startsWith(prefix)) return line.slice(prefix.length);
+      var stripped = line.replace(/^(#{1,6}\s|>\s|- \[[ xX]\]\s|[-*]\s|\d+\.\s)/, "");
+      return prefix + stripped;
+    });
+  }
+
+  function toggleHeading(level){
+    var marker = "#".repeat(level) + " ";
+    applyLinePrefix(function(line){
+      if(line.startsWith(marker)) return line.slice(marker.length);
+      var stripped = line.replace(/^#{1,6}\s/, "");
+      return marker + stripped;
+    });
+  }
+
+  function insertHr(){
+    var s = editor.selectionStart;
+    var val = editor.value;
+    var needsLeadingNl = s>0 && val[s-1] !== "\n";
+    var text = (needsLeadingNl ? "\n" : "") + "\n---\n\n";
+    insertPlain(text);
+  }
+
+  function toggleCode(){
+    var s = editor.selectionStart, e = editor.selectionEnd;
+    var sel = editor.value.slice(s,e);
+    if(sel.indexOf("\n") !== -1){
+      wrapSelection("```\n","\n```","コード");
+    } else {
+      wrapSelection("`","`","コード");
+    }
+  }
+
+  function insertLink(){
+    var s = editor.selectionStart, e = editor.selectionEnd;
+    var val = editor.value;
+    var sel = val.slice(s,e);
+    var label = sel || "リンクテキスト";
+    var text = "[" + label + "](URL)";
+    var newVal = val.slice(0,s) + text + val.slice(e);
+    var urlStart = s + label.length + 3;
+    var urlEnd = urlStart + 3;
+    setEditorValue(newVal, urlStart, urlEnd);
+  }
+
+  /* ---------------- render toolbar (order-aware) ---------------- */
+  function renderToolbar(){
+    toolbar.innerHTML = "";
+
+    var undoBtn = document.createElement("button");
+    undoBtn.className = "flat-btn";
+    undoBtn.textContent = "↺";
+    undoBtn.id = "btnUndo";
+    undoBtn.title = "元に戻す";
+    undoBtn.addEventListener("click", doUndo);
+    toolbar.appendChild(undoBtn);
+
+    var redoBtn = document.createElement("button");
+    redoBtn.className = "flat-btn";
+    redoBtn.textContent = "↻";
+    redoBtn.id = "btnRedo";
+    redoBtn.title = "やり直す";
+    redoBtn.addEventListener("click", doRedo);
+    toolbar.appendChild(redoBtn);
+
+    toolbar.appendChild(makeSep());
+
+    state.toolbarOrder.forEach(function(id){
+      var def = BUTTON_DEFS[id];
+      if(!def) return;
+      var btn = document.createElement("button");
+      btn.className = "flat-btn";
+      btn.innerHTML = def.label;
+      btn.addEventListener("click", def.action);
+      toolbar.appendChild(btn);
+    });
+
+    toolbar.appendChild(makeSep());
+
+    state.customWords.forEach(function(word){
+      var b = document.createElement("button");
+      b.className = "flat-btn word-btn";
+      b.textContent = word;
+      b.addEventListener("click", function(){ insertPlain(word); });
+      toolbar.appendChild(b);
+    });
+
+    var addWordBtn = document.createElement("button");
+    addWordBtn.className = "flat-btn add-word";
+    addWordBtn.textContent = "＋単語";
+    addWordBtn.addEventListener("click", openAddWordModal);
+    toolbar.appendChild(addWordBtn);
+
+    measureToolbar();
+  }
+  function makeSep(){
+    var s = document.createElement("div");
+    s.className = "sep";
+    return s;
+  }
+  function measureToolbar(){
+    requestAnimationFrame(function(){
+      var h = toolbar.offsetHeight || 56;
+      document.documentElement.style.setProperty("--toolbar-h", h + "px");
+    });
+  }
+
+  /* ---------------- editor input events ---------------- */
+  editor.addEventListener("input", function(){
+    updatePreview();
+    updateCharCounter();
+    autoSaveEditor();
+    pushHistoryDebounced(editor.value);
+  });
+  titleInput.addEventListener("input", function(){ autoSaveEditor(); });
+
+  /* ---------------- tabs ---------------- */
+  function setTab(which){
+    if(which === "edit"){
+      tabEdit.classList.add("active"); tabPreview.classList.remove("active");
+      editor.classList.remove("hidden"); preview.classList.add("hidden");
+    } else {
+      tabPreview.classList.add("active"); tabEdit.classList.remove("active");
+      preview.classList.remove("hidden"); editor.classList.add("hidden");
+      updatePreview();
+    }
+  }
+  tabEdit.addEventListener("click", function(){ setTab("edit"); });
+  tabPreview.addEventListener("click", function(){ setTab("preview"); });
+
+  /* ---------------- copy / new / back ---------------- */
+  $("copyBtn").addEventListener("click", function(){
+    var text = editor.value;
+    var btn = $("copyBtn");
+    var done = function(){
+      var original = btn.textContent;
+      btn.textContent = "コピーしました";
+      setTimeout(function(){ btn.textContent = original; }, 1100);
+    };
+    var originalLabel = btn.textContent;
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(done).catch(function(){ legacyCopy(text); done(); });
+    } else {
+      legacyCopy(text); done();
+    }
+  });
+  function legacyCopy(text){
+    var ta = document.createElement("textarea");
+    ta.value = text; ta.style.position="fixed"; ta.style.opacity="0";
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand("copy"); }catch(e){}
+    document.body.removeChild(ta);
+  }
+
+  $("newPageBtn").addEventListener("click", function(){
+    var page = { id:uid(), title:"", content:"", updatedAt:Date.now(), charLimit: state.charLimit };
+    state.pages.push(page);
+    saveState(true);
+    showEditor(page.id);
+    titleInput.focus();
+  });
+  $("backBtn").addEventListener("click", showList);
+
+  /* ---------------- keyboard-aware toolbar position ---------------- */
+  function adjustForKeyboard(){
+    if(!window.visualViewport){ toolbar.style.bottom = "0px"; return; }
+    var vv = window.visualViewport;
+    var offsetBottom = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    toolbar.style.bottom = offsetBottom + "px";
+  }
+  if(window.visualViewport){
+    window.visualViewport.addEventListener("resize", adjustForKeyboard);
+    window.visualViewport.addEventListener("scroll", adjustForKeyboard);
+  }
+  window.addEventListener("resize", adjustForKeyboard);
+
+  /* ---------------- modal system ---------------- */
+  function openModal(html){
+    modalSheet.innerHTML = html;
+    modalOverlay.classList.remove("hidden");
+  }
+  function closeModal(){
+    modalOverlay.classList.add("hidden");
+    modalSheet.innerHTML = "";
+  }
+  modalOverlay.addEventListener("click", function(e){
+    if(e.target === modalOverlay) closeModal();
+  });
+
+  function confirmModal(message, onConfirm){
+    openModal(
+      '<h2>確認</h2>'+
+      '<p style="font-size:14px;line-height:1.7;white-space:pre-wrap;color:var(--text);margin:0 0 18px;">'+escapeHtml(message)+'</p>'+
+      '<div class="export-row">'+
+        '<button class="flat-btn" id="confirmCancel">キャンセル</button>'+
+        '<button class="flat-btn" id="confirmOk" style="color:var(--danger);">削除する</button>'+
+      '</div>'
+    );
+    $("confirmCancel").addEventListener("click", closeModal);
+    $("confirmOk").addEventListener("click", function(){ closeModal(); onConfirm(); });
+  }
+
+  function openAddWordModal(){
+    openModal(
+      '<h2>単語ボタンを追加</h2>'+
+      '<div class="add-word-row" style="padding:2px 2px;">'+
+        '<input id="newWordInput" placeholder="よく使う単語・定型文" maxlength="40">'+
+      '</div>'+
+      '<div class="export-row">'+
+        '<button class="flat-btn" id="addWordCancel">キャンセル</button>'+
+        '<button class="flat-btn" id="addWordOk" style="color:var(--accent);">追加</button>'+
+      '</div>'
+    );
+    var input = $("newWordInput");
+    input.focus();
+    $("addWordCancel").addEventListener("click", closeModal);
+    var doAdd = function(){
+      var v = input.value.trim();
+      if(!v){ closeModal(); return; }
+      if(state.customWords.indexOf(v) !== -1){
+        showToast("「"+v+"」はすでに登録されています");
+        return;
+      }
+      state.customWords.push(v);
+      saveState(true);
+      renderToolbar();
+      closeModal();
+    };
+    $("addWordOk").addEventListener("click", doAdd);
+    input.addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); doAdd(); } });
+  }
+
+  /* ---------------- settings modal ---------------- */
+  function openSettingsModal(){
+    var html =
+      '<h2>設定</h2>'+
+      '<div class="section-label">表示</div>'+
+      '<div class="settings-row">'+
+        '<label>テーマ</label>'+
+        '<div class="theme-toggle panel-sm" style="padding:3px;">'+
+          '<button id="themeLight" class="'+(state.theme==="light"?"active":"")+'">ライト</button>'+
+          '<button id="themeDark" class="'+(state.theme==="dark"?"active":"")+'">ダーク</button>'+
+        '</div>'+
+      '</div>'+
+      '<div class="settings-row">'+
+        '<label>新規ページの初期文字数上限</label>'+
+        '<input type="number" id="charLimitInput" min="0" value="'+state.charLimit+'">'+
+      '</div>'+
+      '<div class="hint-text">文字数の上限はページごとに、編集画面右下のカウンターをタップして個別に変更できます。</div>'+
+      '<div class="section-label">ツールバーの並び順</div>'+
+      '<div class="hint-text">ハンドル（⠿）をドラッグするか、▲▼で表示順を入れ替えられます。</div>'+
+      '<div class="order-list" id="orderList"></div>'+
+      '<div class="section-label">書き出し</div>'+
+      '<div class="export-row">'+
+        '<button class="flat-btn" id="exportMd">.md で保存</button>'+
+        '<button class="flat-btn" id="exportTxt">.txt で保存</button>'+
+      '</div>'+
+      '<div class="section-label">よく使う単語ボタン</div>'+
+      '<div class="word-manage-list" id="wordManageList"></div>'+
+      '<div class="add-word-row" style="padding:2px 2px;">'+
+        '<input id="settingsNewWord" placeholder="新しい単語を追加">'+
+        '<button id="settingsAddWord">追加</button>'+
+      '</div>'+
+      '<div class="section-label">バックアップ</div>'+
+      '<div class="hint-text">全ページを1つのファイルに書き出せます。書き出したファイルをGoogleドライブなど好きな場所に置けば、別の端末で「ファイルから復元」して読み込めます。</div>'+
+      '<div class="export-row">'+
+        '<button class="flat-btn" id="backupExport">全データを書き出す</button>'+
+        '<button class="flat-btn" id="backupImportBtn">ファイルから復元</button>'+
+      '</div>'+
+      '<input type="file" id="backupImportInput" accept="application/json" class="hidden">'+
+      '<div class="section-label">使い方</div>'+
+      '<ul class="help-list">'+
+        '<li>キーボード上のボタンで見出しや強調などを入力できます（記号を覚える必要はありません）</li>'+
+        '<li>「編集／プレビュー」タブでいつでも表示を切り替えられます</li>'+
+        '<li>右下の文字数カウンターをタップすると、そのページだけの上限を設定できます</li>'+
+        '<li>ツールバーのボタンは、この設定画面の「ツールバーの並び順」から入れ替えられます</li>'+
+        '<li>データは端末のブラウザ内に自動保存されます。機種変更やブラウザ変更の前には「全データを書き出す」でバックアップを取ってください</li>'+
+      '</ul>'+
+      '<div class="section-label">免責事項</div>'+
+      '<p class="hint-text">本アプリは現状のまま（as-is）で提供され、動作を保証するものではありません。保存データの消失・破損等について作者は責任を負いかねます。大切な内容は、こまめにバックアップ書き出しを行うか、別の場所にも控えてご利用ください。</p>'+
+      '<div class="section-label">制作者</div>'+
+      '<div class="export-row">'+
+        '<a class="flat-btn link-btn" href="https://x.com/ttk_zetq" target="_blank" rel="noopener noreferrer">X</a>'+
+        '<a class="flat-btn link-btn" href="https://ttkzzz.booth.pm/" target="_blank" rel="noopener noreferrer">Booth</a>'+
+      '</div>'+
+      '<button class="modal-close flat-btn" id="modalCloseBtn">閉じる</button>';
+    openModal(html);
+
+    $("themeLight").addEventListener("click", function(){ state.theme="light"; applyTheme(); saveState(true); openSettingsModal(); });
+    $("themeDark").addEventListener("click", function(){ state.theme="dark"; applyTheme(); saveState(true); openSettingsModal(); });
+    $("charLimitInput").addEventListener("change", function(e){
+      var v = parseInt(e.target.value,10);
+      if(isNaN(v) || v<0) v = 0;
+      state.charLimit = v;
+      saveState(true);
+      updateCharCounter();
+    });
+    $("exportMd").addEventListener("click", function(){ exportCurrentPage("md"); });
+    $("exportTxt").addEventListener("click", function(){ exportCurrentPage("txt"); });
+    $("modalCloseBtn").addEventListener("click", closeModal);
+
+    $("backupExport").addEventListener("click", exportAllData);
+    $("backupImportBtn").addEventListener("click", function(){ $("backupImportInput").click(); });
+    $("backupImportInput").addEventListener("change", function(e){
+      var file = e.target.files[0];
+      if(!file) return;
+      var reader = new FileReader();
+      reader.onload = function(){
+        try{
+          var raw = JSON.parse(reader.result);
+          if(!raw || typeof raw !== "object") throw new Error("invalid");
+          var pages = sanitizeImportedPages(raw.pages);
+          if(pages === null) throw new Error("invalid");
+          var versionNotice = "";
+          if(typeof raw.version === "number" && raw.version > BACKUP_VERSION){
+            versionNotice = "このファイルは新しいバージョン形式のバックアップです。一部の項目が反映されない場合があります。";
+          }
+          confirmImportModal({
+            pages: pages,
+            customWords: sanitizeImportedWords(raw.customWords),
+            charLimit: (typeof raw.charLimit === "number" && raw.charLimit >= 0) ? raw.charLimit : state.charLimit,
+            toolbarOrder: sanitizeImportedOrder(raw.toolbarOrder),
+            versionNotice: versionNotice
+          });
+        }catch(err){
+          openModal('<h2>復元エラー</h2><p style="font-size:14px;color:var(--text);line-height:1.7;">このファイルは読み込めませんでした。書き出し機能で作成したバックアップファイル（.json）を選択してください。</p><button class="modal-close flat-btn" id="errClose">閉じる</button>');
+          $("errClose").addEventListener("click", closeModal);
+        }
+        e.target.value = "";
+      };
+      reader.readAsText(file);
+    });
+
+    renderWordManageList();
+    renderOrderList();
+    $("settingsAddWord").addEventListener("click", function(){
+      var input = $("settingsNewWord");
+      var v = input.value.trim();
+      if(!v) return;
+      if(state.customWords.indexOf(v) !== -1){
+        showToast("「"+v+"」はすでに登録されています");
+        return;
+      }
+      state.customWords.push(v);
+      saveState(true);
+      renderToolbar();
+      renderWordManageList();
+      input.value = "";
+    });
+  }
+
+  function renderOrderList(){
+    var wrap = $("orderList");
+    if(!wrap) return;
+    wrap.innerHTML = "";
+    state.toolbarOrder.forEach(function(id, idx){
+      var def = BUTTON_DEFS[id];
+      if(!def) return;
+      var row = document.createElement("div");
+      row.className = "order-item panel-sm";
+      var labelText = def.name || def.label.replace(/<[^>]+>/g,"");
+      row.innerHTML =
+        '<span class="drag-handle">&#10303;</span>'+
+        '<span class="o-label"></span>'+
+        '<button class="o-move flat-btn" data-dir="up">&#9650;</button>'+
+        '<button class="o-move flat-btn" data-dir="down">&#9660;</button>';
+      row.querySelector(".o-label").textContent = labelText;
+      var upBtn = row.querySelector('[data-dir="up"]');
+      var downBtn = row.querySelector('[data-dir="down"]');
+      if(idx === 0) upBtn.disabled = true;
+      if(idx === state.toolbarOrder.length - 1) downBtn.disabled = true;
+      upBtn.addEventListener("click", function(){ moveToolbarItem(idx, -1); });
+      downBtn.addEventListener("click", function(){ moveToolbarItem(idx, 1); });
+      bindDragHandle(row, row.querySelector(".drag-handle"), idx);
+      wrap.appendChild(row);
+    });
+  }
+  function moveToolbarItem(idx, dir){
+    var newIdx = idx + dir;
+    if(newIdx < 0 || newIdx >= state.toolbarOrder.length) return;
+    var arr = state.toolbarOrder;
+    var tmp = arr[idx]; arr[idx] = arr[newIdx]; arr[newIdx] = tmp;
+    saveState(true);
+    renderToolbar();
+    renderOrderList();
+  }
+  function bindDragHandle(row, handle, startIndex){
+    handle.addEventListener("pointerdown", function(e){
+      e.preventDefault();
+      var startY = e.clientY;
+      var itemH = row.getBoundingClientRect().height + 6;
+      row.classList.add("dragging");
+      row.style.position = "relative";
+      row.style.zIndex = 5;
+      try{ handle.setPointerCapture(e.pointerId); }catch(err){}
+      function move(ev){
+        var dy = ev.clientY - startY;
+        row.style.transform = "translateY(" + dy + "px)";
+      }
+      function up(ev){
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", up);
+        handle.removeEventListener("pointercancel", up);
+        var dy = ev.clientY - startY;
+        var shift = Math.round(dy / itemH);
+        row.style.transform = "";
+        row.style.zIndex = "";
+        row.classList.remove("dragging");
+        var newIndex = Math.max(0, Math.min(state.toolbarOrder.length - 1, startIndex + shift));
+        if(newIndex !== startIndex){
+          var arr = state.toolbarOrder;
+          var moved = arr.splice(startIndex, 1)[0];
+          arr.splice(newIndex, 0, moved);
+          saveState(true);
+          renderToolbar();
+        }
+        renderOrderList();
+      }
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", up);
+      handle.addEventListener("pointercancel", up);
+    });
+  }
+
+  function renderWordManageList(){
+    var list = $("wordManageList");
+    if(!list) return;
+    if(state.customWords.length === 0){
+      list.innerHTML = '<div class="hint-text">登録された単語はありません</div>';
+      return;
+    }
+    list.innerHTML = "";
+    state.customWords.forEach(function(word, idx){
+      var row = document.createElement("div");
+      row.className = "word-manage-item panel-sm";
+      row.innerHTML = '<span></span><button class="flat-btn">削除</button>';
+      row.querySelector("span").textContent = word;
+      row.querySelector("button").addEventListener("click", function(){
+        state.customWords.splice(idx,1);
+        saveState(true);
+        renderToolbar();
+        renderWordManageList();
+      });
+      list.appendChild(row);
+    });
+  }
+
+  // Backup files come from outside the app, so every field is treated as
+  // untrusted input: wrong types are dropped/defaulted rather than trusted.
+  function sanitizeImportedPages(rawPages){
+    if(!Array.isArray(rawPages)) return null;
+    var seenIds = {};
+    var out = [];
+    rawPages.forEach(function(p){
+      if(!p || typeof p !== "object") return;
+      var id = (typeof p.id === "string" && p.id && !seenIds[p.id]) ? p.id : uid();
+      seenIds[id] = true;
+      var title = typeof p.title === "string" ? p.title : "";
+      var content = typeof p.content === "string" ? p.content : "";
+      var updatedAt = (typeof p.updatedAt === "number" && isFinite(p.updatedAt)) ? p.updatedAt : Date.now();
+      var page = { id:id, title:title, content:content, updatedAt:updatedAt };
+      if(typeof p.charLimit === "number" && p.charLimit >= 0) page.charLimit = p.charLimit;
+      out.push(page);
+    });
+    return out;
+  }
+  function sanitizeImportedWords(raw){
+    if(!Array.isArray(raw)) return [];
+    var out = [];
+    raw.forEach(function(w){
+      if(typeof w === "string" && w.trim() && out.indexOf(w) === -1) out.push(w);
+    });
+    return out;
+  }
+  function sanitizeImportedOrder(raw){
+    var out = Array.isArray(raw) ? raw.filter(function(id){ return typeof id === "string" && BUTTON_DEFS[id]; }) : [];
+    DEFAULT_ORDER.forEach(function(id){ if(out.indexOf(id) === -1) out.push(id); });
+    return out;
+  }
+
+  function confirmImportModal(data){
+    var noticeHtml = data.versionNotice
+      ? '<p style="font-size:12px;color:var(--danger);margin:0 0 12px;line-height:1.6;">'+escapeHtml(data.versionNotice)+'</p>'
+      : "";
+    openModal(
+      '<h2>データを復元</h2>'+
+      noticeHtml+
+      '<p style="font-size:14px;line-height:1.7;color:var(--text);margin:0 0 18px;">選択したファイルには '+data.pages.length+' 件のページが含まれています。現在保存されている内容はすべて上書きされます。よろしいですか？</p>'+
+      '<div class="export-row">'+
+        '<button class="flat-btn" id="importCancel">キャンセル</button>'+
+        '<button class="flat-btn" id="importOk" style="color:var(--accent);">復元する</button>'+
+      '</div>'
+    );
+    $("importCancel").addEventListener("click", closeModal);
+    $("importOk").addEventListener("click", function(){
+      state.pages = data.pages;
+      state.customWords = data.customWords;
+      state.charLimit = data.charLimit;
+      state.toolbarOrder = data.toolbarOrder;
+      saveState(true);
+      closeModal();
+      renderToolbar();
+      showList();
+    });
+  }
+
+  /* ---------------- export ---------------- */
+  function downloadBlob(content, type, filename){
+    var blob = new Blob([content], {type: type});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+  }
+  // Windows/macOS both forbid these characters in filenames; replace them
+  // so export never silently fails on the user's OS.
+  function sanitizeFilename(name){
+    var cleaned = String(name).replace(/[\\/:*?"<>|]/g, "_").trim();
+    cleaned = cleaned.replace(/[. ]+$/, "");
+    if(!cleaned) cleaned = "無題のページ";
+    return cleaned.slice(0, 80);
+  }
+  function exportCurrentPage(ext){
+    var page = getCurrentPage();
+    if(!page) return;
+    var name = sanitizeFilename((page.title && page.title.trim()) ? page.title.trim() : "無題のページ");
+    downloadBlob(editor.value, ext==="md" ? "text/markdown" : "text/plain", name + "." + ext);
+    closeModal();
+  }
+  var BACKUP_VERSION = 1;
+  function exportAllData(){
+    var payload = {
+      version: BACKUP_VERSION,
+      exportedAt: new Date().toISOString(),
+      pages: state.pages,
+      customWords: state.customWords,
+      charLimit: state.charLimit,
+      toolbarOrder: state.toolbarOrder
+    };
+    downloadBlob(JSON.stringify(payload, null, 2), "application/json", "markdown-memo-backup.json");
+  }
+
+  $("listSettingsBtn").addEventListener("click", openSettingsModal);
+  $("editorSettingsBtn").addEventListener("click", openSettingsModal);
+
+  /* ---------------- init ---------------- */
+  loadState().then(function(){
+    applyTheme();
+    renderToolbar();
+    showList();
+    adjustForKeyboard();
+  });
+
+})();
+</script>
+</body>
+</html>
