@@ -4,15 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, interactive-widget=resizes-content">
 <title>マークダウンメモ</title>
-  <!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-NSSJ3F7RTZ"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-NSSJ3F7RTZ');
-</script>
 <meta name="description" content="見出しや強調をボタンで入力できる、シンプルなマークダウンメモアプリ。インストール不要、ブラウザだけで動作します。">
 
 <!-- favicon / home screen icon -->
@@ -759,7 +750,7 @@
 
   /* ---------------- routing ---------------- */
   function showList(){
-    flushEditorToState();
+    flushIfEditorVisible();
     viewEditor.classList.add("hidden");
     toolbar.classList.add("hidden");
     viewList.classList.remove("hidden");
@@ -837,6 +828,17 @@
     page.updatedAt = Date.now();
     saveState(true);
   }
+  // Only safe to flush the DOM's current title/content into state.pages
+  // while the editor is actually the visible view. If the editor is
+  // hidden (list view, or before the editor has ever been opened this
+  // session), editor.value/titleInput.value do NOT necessarily reflect
+  // state.currentPageId's real content — flushing then would overwrite
+  // a saved page with blank/stale data.
+  function flushIfEditorVisible(){
+    if(!viewEditor.classList.contains("hidden")){
+      flushEditorToState();
+    }
+  }
   function autoSaveEditor(){
     var page = getCurrentPage();
     if(!page) return;
@@ -845,6 +847,18 @@
     page.updatedAt = Date.now();
     saveState(false);
   }
+
+  // The normal autosave is debounced (600ms) so rapid typing doesn't hammer
+  // storage. But on mobile, backgrounding the tab/app can happen well within
+  // that window, and a pending setTimeout may never fire once the page is
+  // hidden or the tab is discarded — silently dropping the last edit. Force
+  // an immediate, non-debounced save whenever the page is about to go away
+  // (but only if the editor is actually open — see flushIfEditorVisible).
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "hidden") flushIfEditorVisible();
+  });
+  window.addEventListener("pagehide", flushIfEditorVisible);
+  window.addEventListener("beforeunload", flushIfEditorVisible);
   function updatePreview(){
     var val = editor.value;
     if(!val.trim()){
@@ -1283,7 +1297,7 @@
         '<li>データは端末のブラウザ内に自動保存されます。機種変更やブラウザ変更の前には「全データを書き出す」でバックアップを取ってください</li>'+
       '</ul>'+
       '<div class="section-label">免責事項</div>'+
-      '<p class="hint-text">本アプリは現状のまま（as-is）で提供され、動作を保証するものではありません。保存データの消失・破損等について作者は責任を負いかねます。大切な内容は、こまめにバックアップ書き出しを行うか、別の場所にも控えてご利用ください。このツールは制作にAIを使用しています。</p>'+
+      '<p class="hint-text">本アプリは現状のまま（as-is）で提供され、動作を保証するものではありません。保存データの消失・破損等について作者は責任を負いかねます。大切な内容は、こまめにバックアップ書き出しを行うか、別の場所にも控えてご利用ください。</p>'+
       '<div class="section-label">制作者</div>'+
       '<div class="export-row">'+
         '<a class="flat-btn link-btn" href="https://x.com/ttk_zetq" target="_blank" rel="noopener noreferrer">X</a>'+
